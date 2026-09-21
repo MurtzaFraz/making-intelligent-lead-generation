@@ -1,0 +1,1088 @@
+{
+  "name": "Apex Square — AI Prospect Intelligence",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, -96],
+      "id": "318254cf-b993-4891-aaa9-785f910d01f0",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "q": "={{ $json.query }}",
+        "location": "={{ $json.location }}",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [432, -96],
+      "id": "313a9608-7096-4af8-ad83-c2aee7b90d22",
+      "name": "Google search"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().flatMap((item, i) => {\n  const results = item.json.organic_results || [];\n  const queryItem = $('Build Search Queries').all()[i].json;\n\n  return results\n    .filter(r => r.link)\n    .map(r => ({\n      json: {\n        company: r.title || '',\n        website: r.link || '',\n        snippet: r.snippet || '',\n        position: r.position || null,\n        source: 'Google Search',\n        location: queryItem.location,\n        segment: queryItem.segment\n      }\n    }));\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [656, -96],
+      "id": "17755a64-e368-44f6-95f3-7cb26bab1598",
+      "name": "Extract Companies"
+    },
+    {
+      "parameters": {
+        "jsCode": "function getDomain(url) {\n  if (!url) return '';\n\n  return url\n    .replace(/^https?:\\/\\//i, '')\n    .replace(/^www\\./i, '')\n    .split('/')[0]\n    .split('?')[0]\n    .split('#')[0]\n    .toLowerCase()\n    .trim();\n}\n\nreturn $input.all().map(item => {\n  const lead = item.json;\n\n  return {\n    json: {\n      ...lead,\n      domain: getDomain(lead.website)\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -96],
+      "id": "59200176-8ce7-42a2-921c-d3e479389cce",
+      "name": "Clean & Normalize Leads",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen = new Set();\n\nreturn $input.all().filter(item => {\n  const domain = item.json.domain;\n\n  // Remove records with no usable domain\n  if (!domain) {\n    return false;\n  }\n\n  // Remove duplicate domains\n  if (seen.has(domain)) {\n    return false;\n  }\n\n  seen.add(domain);\n  return true;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1104, -96],
+      "id": "a4b3cabc-fffa-48e8-9f0b-b03fdbc3f9a0",
+      "name": "Filter / Deduplicate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const blockedDomains = [\n  'yelp.com', 'houzz.com.au', 'sydneybuildexpo.com', 'd7leadfinder.com',\n  'facebook.com', 'linkedin.com', 'instagram.com', 'youtube.com', 'twitter.com', 'x.com',\n  'yellowpages.com.au', 'truelocal.com.au', 'hipages.com.au', 'oneflare.com', 'oneflare.com.au',\n  'serviceseeking.com.au', 'localsearch.com.au', 'productreview.com.au', 'tripadvisor.com',\n  'google.com', 'wikipedia.org', 'pinterest.com',\n  'cylex-australia.com', 'hotfrog.com.au', 'yalwa.com.au', 'n49.com', 'brownbook.net',\n  'startlocal.com.au', 'australiabusinesslist.com', 'infobel.com', 'whitepages.com.au',\n  'trustpilot.com', 'canstar.com.au', 'finder.com.au'\n];\n\nconst blockedSuffixes = ['.gov.au', '.edu.au', '.org.au'];\n\nreturn $input.all().filter(item => {\n  const domain = item.json.domain;\n\n  if (blockedSuffixes.some(suffix => domain.endsWith(suffix))) {\n    return false;\n  }\n\n  return !blockedDomains.some(blocked =>\n    domain === blocked || domain.endsWith(`.${blocked}`)\n  );\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1328, -96],
+      "id": "8c6e36f7-a223-4205-a016-9d677edd3777",
+      "name": "Filter Business Websites"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.fields.Website }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1776, -96],
+      "id": "0b36f0ac-5f4c-405a-aa16-9d056b088164",
+      "name": "HTTP Request",
+      "executeOnce": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "cssSelector": "body"
+            },
+            {
+              "key": "bodyText",
+              "cssSelector": "body"
+            },
+            {
+              "key": "mailtoLinks",
+              "cssSelector": "a[href*='mailto']",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            },
+            {
+              "key": "scriptSrcs",
+              "cssSelector": "script",
+              "returnValue": "attribute",
+              "attribute": "src",
+              "returnArray": true
+            },
+            {
+              "key": "iframeSrcs",
+              "cssSelector": "iframe",
+              "returnValue": "attribute",
+              "attribute": "src",
+              "returnArray": true
+            },
+            {
+              "key": "forms",
+              "cssSelector": "form",
+              "returnValue": "html",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [2000, -96],
+      "id": "d0305745-7eb8-43ea-bac5-6d53c20f170d",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractEmails(text) {\n  const matches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [];\n  const junk = ['wixpress', 'sentry', 'godaddy', 'cloudflare', '.png', '.jpg', '.gif', 'example.com'];\n  return [...new Set(matches.filter(e => !junk.some(j => e.toLowerCase().includes(j))))];\n}\n\nfunction extractPhones(text) {\n  const matches = text.match(/(?:\\+?61[ -]?[2-478]|\\(0[2-478]\\)|0[2-478])[ -]?\\d{4}[ -]?\\d{4}|1[38]00[ -]?\\d{3}[ -]?\\d{3}|04\\d{2}[ -]?\\d{3}[ -]?\\d{3}/g) || [];\n  return [...new Set(matches.map(p => p.trim()))];\n}\n\nreturn $input.all().map((item, i) => {\n  const upstream = $('Filter Business Websites').all()[i].json;\n\n  const rawText = item.json.bodyText || '';\n\n  const cleaned = rawText\n    .replace(/javascript:\\s*;?/gi, ' ')\n    .replace(/https?:\\/\\/\\S+/gi, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  const websiteText = cleaned.substring(0, 15000);\n\n  const mailtoEmails = (item.json.mailtoLinks || [])\n    .map(href => href.replace(/^mailto:/i, '').split('?')[0].trim())\n    .filter(Boolean);\n\n  const telPhones = (item.json.telLinks || [])\n    .map(href => href.replace(/^tel:/i, '').trim())\n    .filter(Boolean);\n\n  const email = [...new Set([...mailtoEmails, ...extractEmails(rawText)])][0] || '';\n  const phone = [...new Set([...telPhones, ...extractPhones(rawText)])][0] || '';\n\n  return {\n    json: {\n      ...upstream,\n      ...item.json,\n      websiteText,\n      email,\n      phone\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2224, -96],
+      "id": "84182fd9-2d65-458a-a472-36109f595645",
+      "name": "Clean Website Text"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are a B2B sales intelligence analyst working for an AI automation agency.\n\nYour job is to analyze a company's public website and search information and determine:\n\n1. What business processes could realistically benefit from automation.\n2. Which automation service should be pitched first.\n3. How the company should be approached.\n\nThe agency builds practical business automations using tools such as n8n, AI/LLMs, Airtable, CRMs, email, webhooks, APIs, Google Workspace and similar business software.\n\nPRIORITY AUTOMATION AREAS:\n\n- Lead capture and CRM automation\n- AI-powered enquiry qualification\n- AI extraction of customer/project requirements\n- Construction quote preparation\n- Quote approval and delivery workflows\n- Automated customer follow-ups\n- Email and communication automation\n- Document and data extraction\n- Internal administrative workflows\n- Reporting and notifications\n- Lead routing and sales pipeline automation\n\nDETECTED SIGNALS (factual, from automated scan — treat as ground truth, not inference):\n\nHas Online Quote/Contact Form: {{ $('Detect Business Signals').item.json.hasOnlineQuoteForm }}\nContact Method: {{ $('Detect Business Signals').item.json.contactMethod }}\nCRM Detected: {{ $('Detect Business Signals').item.json.crmDetected || \"None detected\" }}\nBooking Tool Detected: {{ $('Detect Business Signals').item.json.bookingToolDetected || \"None detected\" }}\nForm With No Detected Backend: {{ $('Detect Business Signals').item.json.formNoBackend }}\n\nCalculated Lead Score: {{ $('Calculate Lead Score').item.json.leadScore }}/100\nQualification Tier: {{ $('Calculate Lead Score').item.json.qualification }}\n\nThe lead score and qualification tier above are FINAL — they are computed by a fixed formula outside this prompt. Do NOT output your own leadScore or qualification fields, do not restate them under different values, and do not let your reasoning or pitch imply a different tier than the one given. Your job is to explain, in the reasoning field, why this score makes sense given the evidence. If the evidence seems to genuinely contradict the score, say so explicitly in your reasoning — that mismatch is useful signal for recalibrating the formula, not something to quietly correct.\n\nOn \"None detected\" vs \"Form With No Detected Backend\": \"None detected\" for CRM/Booking Tool means absence of evidence, not proof of absence — a company may use a system this scan can't see (internal-only tools, phone-based dispatch). Do not treat \"None detected\" alone as a pain indicator. However, \"Form With No Detected Backend: true\" is a specific, verified combination — a public lead-capture form paired with no detected CRM or booking system — and this MAY be cited directly as a pain indicator, since it is observed evidence, not inference.\n\nEVIDENCE RULES:\n\n1. Only state facts supported by the supplied company information and DETECTED SIGNALS.\n2. Never invent software, CRM systems, employees, processes, revenue, problems or operational weaknesses beyond what DETECTED SIGNALS confirms.\n3. If something cannot reasonably be determined, use \"Unknown\".\n4. Clearly distinguish observed evidence from proposed automation opportunities.\n5. Never describe an automation opportunity as an existing problem unless there is evidence of that problem.\n6. Do not recommend complex technologies simply because they are technically possible.\n7. Prefer practical, commercially realistic automations.\n8. Prioritize opportunities that could plausibly save time, reduce administrative work, improve response speed, reduce errors, or increase lead conversion.\n9. Consider the company's apparent size, complexity, services, locations, projects and digital presence when writing your reasoning.\n10. A polished website does NOT automatically mean high digital maturity.\n11. Do not infer internal processes merely from the existence of a website feature.\n12. Do not assume a company uses a particular CRM, spreadsheet, ERP, or communication platform unless DETECTED SIGNALS confirms it or it is explicitly stated in the supplied information.\n\nPAIN INDICATORS:\n\nBe extremely conservative. Only include a pain indicator when the supplied information or DETECTED SIGNALS provides direct or strong evidence of an operational challenge.\n\nThe following are NOT automatically pain indicators on their own:\n\n- Multiple services\n- Multiple projects\n- A large website\n- Multiple offices\n- Phone and email contact details\n- A contact form by itself (with a detected backend, or unknown backend status)\n- A large team\n- Many customers\n- A large project portfolio\n\nThese may indicate operational complexity or automation potential, but they are NOT proof of pain.\n\nException: \"Form With No Detected Backend: true\" IS valid to cite as a pain indicator — it is a specific, verified combination directly observed, not an inference.\n\nIf no genuine pain is evidenced beyond that, return:\n\"painIndicators\": []\n\nNever manufacture pain indicators to make a lead appear more attractive.\n\nOPERATIONAL COMPLEXITY:\n\nAssess company complexity using observable factors such as:\n\n- Number of services\n- Number of locations\n- Variety of project types\n- Visible project portfolio\n- Number and variety of stakeholders\n- Geographic scope\n- Business divisions\n\nThese factors can increase automation potential without being treated as evidence of operational pain.\n\nFIELDS TO OUTPUT:\n\ndigitalMaturity — choose exactly one: \"Low\" / \"Moderate\" / \"High\" / \"Unknown\"\nGround your answer in DETECTED SIGNALS first: a detected CRM or booking tool suggests at least \"Moderate\"; \"Form With No Detected Backend: true\" suggests \"Low\"; if DETECTED SIGNALS gives no basis and nothing else in the supplied information helps, use \"Unknown\" rather than guessing from website polish alone.\n\ncompanyComplexity — choose exactly one: \"Low\" / \"Medium\" / \"High\" / \"Unknown\"\n\nautomationPotential — a number 0-100. Estimated potential for useful business-process automation based on the breadth and relevance of opportunities you can reasonably identify. This does NOT require proof of an existing problem — it measures opportunity, not pain. Do not reduce it to near-zero merely because internal processes aren't publicly visible; use the observable business model to estimate where automation could plausibly help.\n\nGuidance:\n90-100: Many strong, commercially meaningful opportunities across multiple processes.\n80-89: Several strong opportunities with clear relevance to the business model.\n70-79: Good potential with multiple credible opportunities.\n60-69: Moderate potential with one or more useful opportunities.\n40-59: Limited but plausible opportunities.\nBelow 40: Very limited observable opportunity, or company is a poor fit for the agency's services.\n\nautomationOpportunities — list practical workflows suggested by observable evidence, prioritizing in this order: lead/enquiry capture and qualification, quote preparation and processing, CRM/data entry automation, customer follow-up, document processing, reporting/notifications, other relevant internal workflows. These are recommendations, not claims that the company currently has these problems.\n\nrecommendedAutomation — choose ONE primary automation to pitch first, using a concise name such as: \"AI Enquiry Qualification\", \"Lead Capture & CRM Automation\", \"AI Quote Preparation\", \"Automated Quote Follow-Up\", \"Document Processing Automation\", \"Sales Follow-Up Automation\". Base the choice on company characteristics, observable complexity, services, project activity, and relevance to practical automation.\n\nrecommendedPitch — a concise, personalized sales angle. It must:\n- Be specific to the company.\n- Reference observable characteristics where appropriate.\n- Propose an automation opportunity rather than claim an unproven problem — UNLESS \"Form With No Detected Backend: true\", in which case you may reference that specific gap directly, since it's verified evidence.\n- Avoid generic statements like \"AI can transform your business.\"\n- Avoid exaggerated claims.\n- Sound like genuine B2B outreach.\n\nPrefer: \"Given your range of services and project activity, I'd be interested in exploring whether...\"\nAvoid: \"I noticed your team struggles with...\" (unless formNoBackend evidence directly supports it)\n\naiReasoning — briefly explain your digitalMaturity, companyComplexity, and automationPotential choices, why the recommended automation fits, and — since the lead score is fixed — whether the evidence supports or sits in tension with the given score/tier. Do not infer employee count, revenue, market share, or organizational scale unless explicitly supported by the supplied information. Do not repeat the entire website back.\n\nReturn ONLY valid JSON in exactly this shape:\n\n{\n  \"digitalMaturity\": \"Low\" | \"Moderate\" | \"High\" | \"Unknown\",\n  \"companyComplexity\": \"Low\" | \"Medium\" | \"High\" | \"Unknown\",\n  \"automationPotential\": 0-100,\n  \"painIndicators\": [],\n  \"automationOpportunities\": [],\n  \"recommendedAutomation\": \"\",\n  \"recommendedPitch\": \"\",\n  \"aiReasoning\": \"\"\n}"
+            },
+            {
+              "content": "=Analyze this company as a potential B2B client for an AI automation agency.\n\nCOMPANY:\n{{ $('Filter Business Websites').item.json.company }}\n\nWEBSITE:\n{{ $('Filter Business Websites').item.json.website }}\n\nDOMAIN:\n{{ $('Filter Business Websites').item.json.domain }}\n\nLOCATION:\n{{ $('Filter Business Websites').item.json.location }}\n\nGOOGLE SEARCH SNIPPET:\n{{ $('Filter Business Websites').item.json.snippet }}\n\nWEBSITE CONTENT:\n{{ $('Clean Website Text').item.json.websiteText }}\n\nDETECTED SIGNALS (factual, from automated scan — treat as ground truth, not inference):\n\nHas Online Quote/Contact Form: {{ $('Detect Business Signals').item.json.hasOnlineQuoteForm }}\nContact Method: {{ $('Detect Business Signals').item.json.contactMethod }}\nCRM Detected: {{ $('Detect Business Signals').item.json.crmDetected || \"None detected\" }}\nBooking Tool Detected: {{ $('Detect Business Signals').item.json.bookingToolDetected || \"None detected\" }}\n\nReturn exactly this JSON structure:\n\n{\n  \"industry\": \"\",\n  \"leadScore\": 0,\n  \"qualification\": \"\",\n  \"digitalMaturity\": \"\",\n  \"companyComplexity\": \"\",\n  \"automationPotential\": 0,\n  \"painIndicators\": [],\n  \"automationOpportunities\": [],\n  \"recommendedAutomation\": \"\",\n  \"recommendedPitch\": \"\",\n  \"aiReasoning\": \"\",\n  \"domain\": \"\"\n}\n\nRequirements:\n\n- Use evidence from the supplied information.\n- Do not invent operational problems.\n- Automation opportunities are recommendations, not claims about existing problems.\n- Only include painIndicators when there is direct or strong evidence of an operational challenge.\n- If no genuine pain is evidenced, return an empty painIndicators array.\n- Choose exactly one recommendedAutomation.\n- Make the recommended pitch specific to the company.\n- Do not claim that the company manually performs a process unless the supplied information supports that claim.\n- Do not assume what CRM, ERP, project management or other software the company uses.\n- For \"domain\", return the DOMAIN provided above exactly as received. Do not modify, normalize, infer, or reconstruct it.\n\nOUTPUT FORMAT:\n\nReturn ONLY the raw JSON object.\n\nDo NOT use Markdown.\nDo NOT wrap the JSON in ```json or ``` code fences.\nDo NOT include explanations before or after the JSON.\n\nThe first character of your response must be { and the last character must be }."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [2864, -96],
+      "id": "56fad965-1311-4d24-847c-e2c064ab4775",
+      "name": "Message a model"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, i) => {\n  const raw = item.json.output?.[0]?.content?.[0]?.text || '';\n  const cleaned = raw\n    .replace(/^```json\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n  const analysis = JSON.parse(cleaned);\n  const original = $('Calculate Lead Score').all()[i].json;\n\n  return {\n    json: {\n      ...original,\n      ...analysis,\n      leadScore: original.leadScore,\n      qualification: original.qualification\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3216, -96],
+      "id": "24fe788c-6f05-417d-9a80-987aa74f427b",
+      "name": "Parse AI Analysis"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appNRJrMXhpKjc2GO",
+          "mode": "list",
+          "cachedResultName": "Apex Leads",
+          "cachedResultUrl": "https://airtable.com/appNRJrMXhpKjc2GO"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblCgY4270DoE3UEP",
+          "mode": "list",
+          "cachedResultName": "Prospects",
+          "cachedResultUrl": "https://airtable.com/appNRJrMXhpKjc2GO/tblCgY4270DoE3UEP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Industry": "={{ $json.industry }}",
+            "Lead Score": "={{ $json.leadScore }}",
+            "Qualification": "={{ $json.qualification }}",
+            "Digital Maturity": "={{ $json.digitalMaturity }}",
+            "Automation Potential": "={{ $json.automationPotential }}",
+            "Pain Indicators": "={{ $json.painIndicators.join(', ') }}",
+            "Automation Opportunities": "={{ $json.automationOpportunities.join('\\n') }}",
+            "Recommended Pitch": "={{ $json.recommendedPitch }}",
+            "AI Reasoning": "={{ $json.aiReasoning }}",
+            "Domain": "={{ $json.domain }}",
+            "Company Complexity": "={{ $json.companyComplexity }}",
+            "Recommended Automation": "={{ $json.recommendedAutomation }}",
+            "Email": "={{ $json.email }}",
+            "Phone": "={{ $json.phone }}",
+            "Contact Method": "={{ $json.contactMethod }}",
+            "CRM Detected": "={{ $json.crmDetected }}",
+            "Booking Tool Detected": "={{ $json.bookingToolDetected }}",
+            "Has Online Quote Form": "={{ $json.hasOnlineQuoteForm }}",
+            "Form With No Detected Backend": "={{ $json.formNoBackend }}",
+            "Group Affiliation Detected": "={{ $json.groupAffiliation }}"
+          },
+          "matchingColumns": ["Domain"],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Domain",
+              "displayName": "Domain",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Industry",
+              "displayName": "Industry",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Lead Score",
+              "displayName": "Lead Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Qualification",
+              "displayName": "Qualification",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Digital Maturity",
+              "displayName": "Digital Maturity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Automation Potential",
+              "displayName": "Automation Potential",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Pain Indicators",
+              "displayName": "Pain Indicators",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Automation Opportunities",
+              "displayName": "Automation Opportunities",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Recommended Pitch",
+              "displayName": "Recommended Pitch",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Reasoning",
+              "displayName": "AI Reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Researching",
+                  "value": "Researching"
+                },
+                {
+                  "name": "Qualified",
+                  "value": "Qualified"
+                },
+                {
+                  "name": "Contacted",
+                  "value": "Contacted"
+                },
+                {
+                  "name": "Replied",
+                  "value": "Replied"
+                },
+                {
+                  "name": "Meeting",
+                  "value": "Meeting"
+                },
+                {
+                  "name": "Won",
+                  "value": "Won"
+                },
+                {
+                  "name": "Lost",
+                  "value": "Lost"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Discovered At",
+              "displayName": "Discovered At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company Complexity",
+              "displayName": "Company Complexity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Recommended Automation",
+              "displayName": "Recommended Automation",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Has Online Quote Form",
+              "displayName": "Has Online Quote Form",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Contact Method",
+              "displayName": "Contact Method",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "CRM Detected",
+              "displayName": "CRM Detected",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Booking Tool Detected",
+              "displayName": "Booking Tool Detected",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Form With No Detected Backend",
+              "displayName": "Form With No Detected Backend",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Group Affiliation Detected",
+              "displayName": "Group Affiliation Detected",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [3440, -96],
+      "id": "b87d65f0-3a8c-47ba-9a4d-664d727c4d84",
+      "name": "Update record"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "appNRJrMXhpKjc2GO",
+          "mode": "list",
+          "cachedResultName": "Apex Leads",
+          "cachedResultUrl": "https://airtable.com/appNRJrMXhpKjc2GO"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblCgY4270DoE3UEP",
+          "mode": "list",
+          "cachedResultName": "Prospects",
+          "cachedResultUrl": "https://airtable.com/appNRJrMXhpKjc2GO/tblCgY4270DoE3UEP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Company": "={{ $json.company }}",
+            "Website": "={{ $json.website }}",
+            "Domain": "={{ $json.domain }}",
+            "Location": "={{ $json.location }}",
+            "Lead Score": "=",
+            "Discovered At": "={{ $now }}",
+            "Status": "New",
+            "Source": "={{ $json.source }}",
+            "Automation Potential": 0,
+            "Industry": "={{ $json.industry }}"
+          },
+          "matchingColumns": ["Domain"],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Domain",
+              "displayName": "Domain",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Industry",
+              "displayName": "Industry",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Lead Score",
+              "displayName": "Lead Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Qualification",
+              "displayName": "Qualification",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Digital Maturity",
+              "displayName": "Digital Maturity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Automation Potential",
+              "displayName": "Automation Potential",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Pain Indicators",
+              "displayName": "Pain Indicators",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Automation Opportunities",
+              "displayName": "Automation Opportunities",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Recommended Pitch",
+              "displayName": "Recommended Pitch",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Reasoning",
+              "displayName": "AI Reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Researching",
+                  "value": "Researching"
+                },
+                {
+                  "name": "Qualified",
+                  "value": "Qualified"
+                },
+                {
+                  "name": "Contacted",
+                  "value": "Contacted"
+                },
+                {
+                  "name": "Replied",
+                  "value": "Replied"
+                },
+                {
+                  "name": "Meeting",
+                  "value": "Meeting"
+                },
+                {
+                  "name": "Won",
+                  "value": "Won"
+                },
+                {
+                  "name": "Lost",
+                  "value": "Lost"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Discovered At",
+              "displayName": "Discovered At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company Complexity",
+              "displayName": "Company Complexity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Recommended Automation",
+              "displayName": "Recommended Automation",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [1552, -96],
+      "id": "5a490b7e-14c1-4c80-b31c-653533389e97",
+      "name": "Create or update a record"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cityData = [\n  { name: 'Sydney', state: 'New South Wales' },\n  // { name: 'Melbourne', state: 'Victoria' },\n  // { name: 'Brisbane', state: 'Queensland' },\n];\n\nconst builderQueries = [\n  'residential builders in',\n  'commercial builders in',\n  'home renovation builders in'\n];\nconst tradeQueries = [\n  'electricians in',\n  'plumbers in',\n  'HVAC installers in'\n];\n\nconst items = [];\nfor (const city of cityData) {\n  for (const q of [...builderQueries, ...tradeQueries]) {\n    items.push({\n      json: {\n        query: `${q} ${city.name} ${city.state}, Australia`,\n        location: `${city.name}, ${city.state}, Australia`,\n        segment: builderQueries.includes(q) ? 'Builder' : 'Trade'\n      }\n    });\n  }\n}\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, -96],
+      "id": "3e2e2b8b-3c2a-4f9f-bd88-7de477c04428",
+      "name": "Build Search Queries"
+    },
+    {
+      "parameters": {
+        "jsCode": "const CRM_SIGNATURES = {\n  'HubSpot': ['hubspot', 'hs-scripts.com'],\n  'Salesforce': ['salesforce.com', 'force.com'],\n  'Pipedrive': ['pipedrive'],\n  'Zoho': ['zoho'],\n  'ServiceM8': ['servicem8'],\n  'Fergus': ['fergus.com'],\n  'simPRO': ['simpro'],\n  'Tradify': ['tradify'],\n  'AroFlo': ['aroflo'],\n  'Jobber': ['getjobber', 'jobber.com'],\n  'Housecall Pro': ['housecallpro']\n};\n\nconst BOOKING_SIGNATURES = {\n  'Calendly': ['calendly'],\n  'Acuity Scheduling': ['acuityscheduling'],\n  'ServiceM8': ['servicem8'],\n  'Fergus': ['fergus.com'],\n  'simPRO': ['simpro']\n};\n\nconst groupPatterns = [\n  'part of the', 'part of a', 'group of companies', 'family of brands',\n  'sister compan', 'a member of the', 'proudly supported by', 'backed by'\n];\n\nfunction detectFromSources(sources, signatureMap) {\n  const found = [];\n  for (const [name, patterns] of Object.entries(signatureMap)) {\n    if (sources.some(src => patterns.some(p => (src || '').toLowerCase().includes(p)))) {\n      found.push(name);\n    }\n  }\n  return found;\n}\n\nreturn $input.all().map(item => {\n  const scriptSrcs = item.json.scriptSrcs || [];\n  const iframeSrcs = item.json.iframeSrcs || [];\n  const forms = item.json.forms || [];\n  const allSources = [...scriptSrcs, ...iframeSrcs];\n\n  const crmFound = detectFromSources(allSources, CRM_SIGNATURES);\n  const bookingFound = detectFromSources(allSources, BOOKING_SIGNATURES);\n  const hasOnlineQuoteForm = forms.length > 0;\n  const formNoBackend = hasOnlineQuoteForm && crmFound.length === 0 && bookingFound.length === 0;\n\n  const rawTextLower = (item.json.bodyText || '').toLowerCase();\n  const groupAffiliation = groupPatterns.some(p => rawTextLower.includes(p));\n\n  let contactMethod = 'Unknown';\n  if (hasOnlineQuoteForm && (item.json.email || item.json.phone)) {\n    contactMethod = 'Both';\n  } else if (hasOnlineQuoteForm) {\n    contactMethod = 'Online Form';\n  } else if (item.json.email || item.json.phone) {\n    contactMethod = 'Phone/Email Only';\n  }\n\n  return {\n    json: {\n      ...item.json,\n      hasOnlineQuoteForm,\n      contactMethod,\n      crmDetected: crmFound.join(', '),\n      bookingToolDetected: bookingFound.join(', '),\n      formNoBackend,\n      groupAffiliation\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2432, -96],
+      "id": "98acf6a6-522e-4a99-b7e2-ac2f49e6483e",
+      "name": "Detect Business Signals"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const d = item.json;\n  let score = 0;\n\n  if (d.formNoBackend) {\n    score += 55;\n  } else if (d.hasOnlineQuoteForm) {\n    score += 15;\n  } else if (d.contactMethod === 'Phone/Email Only') {\n    score += 25;\n  }\n\n  if (d.crmDetected) score -= 10;\n  if (d.bookingToolDetected) score -= 10;\n  if (d.groupAffiliation) score -= 35;\n\n  if (d.email || d.phone) {\n    score += 20;\n  } else {\n    score -= 70;\n  }\n\n  score = Math.max(0, Math.min(100, score));\n\n  let qualification = 'Low Priority';\n  if (score >= 55) qualification = 'High Priority';\n  else if (score >= 25) qualification = 'Medium Priority';\n\n  return {\n    json: {\n      ...d,\n      leadScore: score,\n      qualification\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, -96],
+      "id": "95160f2c-9b11-43b1-b103-da183d920d8a",
+      "name": "Calculate Lead Score"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Build Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google search": {
+      "main": [
+        [
+          {
+            "node": "Extract Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Companies": {
+      "main": [
+        [
+          {
+            "node": "Clean & Normalize Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean & Normalize Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter / Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter / Deduplicate": {
+      "main": [
+        [
+          {
+            "node": "Filter Business Websites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Business Websites": {
+      "main": [
+        [
+          {
+            "node": "Create or update a record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Clean Website Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Website Text": {
+      "main": [
+        [
+          {
+            "node": "Detect Business Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Update record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update record": {
+      "main": [[]]
+    },
+    "Create or update a record": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Queries": {
+      "main": [
+        [
+          {
+            "node": "Google search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Business Signals": {
+      "main": [
+        [
+          {
+            "node": "Calculate Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Lead Score": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d126c72f-b46f-4b58-a22d-55097c84c9f0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7bb7faf08e93acc59441ecea2ef2e26ff954143c20925a5da08e6afc7457d344"
+  },
+  "nodeGroups": [],
+  "id": "OAlbQshVMM8wZweU",
+  "tags": []
+}
